@@ -1,0 +1,94 @@
+---
+- hosts: all
+  become: True
+  tasks:
+    - include: tasks/deps.yml
+
+    - name: Install nginx
+      yum: name=nginx state=present 
+
+    - name: Copy nginx configuration file
+      copy:
+        src: config/nginx.conf
+        dest: /etc/nginx/nginx.conf
+        remote_src: no
+        mode: 0644
+
+    - name: Create SSL directory
+      file:
+         path: /etc/nginx/ssl
+         state: directory
+
+    - name: Install certificate and secure with proper permissions
+      copy:
+        src: files/self-signed.crt
+        dest: /etc/nginx/ssl/self-signed.crt
+        remote_src: no
+        owner: root
+        group: root
+        mode: 0600
+
+    - name: Install SSL private key and secure with proper permissions
+      copy:
+        src: files/self-signed.key
+        dest: /etc/nginx/ssl/self-signed.key
+        remote_src: no
+        owner: root
+        group: root
+        mode: 0600
+
+    - name: Copy application files
+      copy:
+        src: application.zip 
+        dest: /tmp/application.zip
+        remote_src: no
+
+    - name: Create application directory
+      file:
+         path: /opt
+         state: directory
+
+    - name: Unzip application.zip
+      unarchive:
+         src: /tmp/application.zip 
+         dest: /opt
+         remote_src: yes
+
+    - name: Start Nginx
+      service: name=nginx enabled=yes state=started
+    
+    - name: Download runit
+      get_url: 
+         url: https://packagecloud.io/install/repositories/imeyer/runit/script.rpm.sh
+         dest: /tmp/
+         mode: 0755
+
+    - name: Execute runit installer
+      shell: /tmp/script.rpm.sh
+      args:
+        chdir: /tmp/
+
+    - name: Install runit
+      yum:
+         name: runit-2.1.2-1.el6.x86_64
+         state: present
+ 
+    - name: Create directory for runit app service
+      file:
+        path: /etc/service/app
+        state: directory
+
+    - name: Create symlink for app
+      file: 
+        src: /opt/application/run
+        dest: /etc/service/app/run
+        state: link
+
+    - name: Start application
+      runit:
+        name: app 
+        state: started
+   
+    - name: Start Nginx
+      service: name=nginx state=restarted
+
